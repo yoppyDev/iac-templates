@@ -1,0 +1,156 @@
+# 「aws:cloudformation:stack-name」タグが付与されたリソースのコストを取得し、Slackに通知する
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Get AWS billing information and send it to Slack
+
+Parameters:
+  SlackWebhookUrl:
+    Type: String
+    Description: Slack Incoming Webhook URL
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "lambda-billing-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:ListMetrics"
+                  - "ce:GetCostAndUsage"
+                  - "ce:GetCostForecast"
+                  - "cloudformation:ListStacks"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "arn:aws:logs:*:*:*"
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: "index.handler"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import requests
+          import datetime
+          import boto3
+          import logging
+          import calendar
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def get_all_stack_names():
+              client = boto3.client('cloudformation', region_name='ap-northeast-1')
+              paginator = client.get_paginator('list_stacks')
+              stack_names = []
+              for page in paginator.paginate(StackStatusFilter=['CREATE_COMPLETE', 'UPDATE_COMPLETE']):
+                  for stack in page['StackSummaries']:
+                      stack_names.append(stack['StackName'])
+              return stack_names
+
+          def get_cost_for_stack(stack_name, start_date, end_date):
+              client = boto3.client('ce', region_name='ap-northeast-1')
+              response = client.get_cost_and_usage(
+                  TimePeriod={
+                      'Start': start_date.strftime('%Y-%m-%d'),
+                      'End': end_date.strftime('%Y-%m-%d')
+                  },
+                  Granularity='MONTHLY',
+                  Filter={
+                      'Tags': {
+                          'Key': 'aws:cloudformation:stack-name',
+                          'Values': [stack_name]
+                      }
+                  },
+                  Metrics=["UnblendedCost"]
+              )
+              results_by_time = response.get('ResultsByTime')
+              if results_by_time:
+                  total_cost = sum(float(day['Total']['UnblendedCost']['Amount']) for day in results_by_time)
+              else:
+                  total_cost = 0
+              return total_cost
+
+          def handler(event, context):
+              today = datetime.datetime.today()
+              start_of_month = datetime.datetime(today.year, today.month, 1)
+              end_of_month = datetime.datetime(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+
+              ce_client = boto3.client('ce', region_name='ap-northeast-1')
+              forecast_response = ce_client.get_cost_forecast(
+                  TimePeriod={
+                      'Start': today.strftime('%Y-%m-%d'),
+                      'End': end_of_month.strftime('%Y-%m-%d')
+                  },
+                  Metric='UNBLENDED_COST',
+                  Granularity='MONTHLY'
+              )
+
+              client = boto3.client('cloudwatch', region_name='us-east-1')
+              get_metric_statistics = client.get_metric_statistics(
+                  Namespace='AWS/Billing',
+                  MetricName='EstimatedCharges',
+                  Dimensions=[
+                      {
+                          'Name': 'Currency',
+                          'Value': 'USD'
+                      }
+                  ],
+                  StartTime=today - datetime.timedelta(days=1),
+                  EndTime=today,
+                  Period=86400,
+                  Statistics=['Maximum']
+              )
+
+              current_cost = get_metric_statistics['Datapoints'][0]['Maximum']
+              forecast_cost = float(forecast_response['Total']['Amount'])
+
+              stack_names = get_all_stack_names()
+              messages = [f"当月の現費用：${current_cost:.2f}", f"当月の予測費用：${forecast_cost:.2f}\n"]
+
+              for stack_name in stack_names:
+                  cost = get_cost_for_stack(stack_name, start_of_month, end_of_month)
+                  messages.append(f"{stack_name}: ${cost:.2f}")
+
+              headers = {'Content-Type': 'application/json'}
+              response = requests.post(os.environ.get('SLACK_WEBHOOK_URL'), data=json.dumps({'text': "\n".join(messages)}), headers=headers)
+              return {
+                  'statusCode': response.status_code,
+                  'body': response.text
+              }
+      Runtime: "python3.7"
+      Environment:
+        Variables:
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
+      Timeout: 30
+
+  EventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: "cron(0 21 * * ? *)" # 6 AM JST
+      Targets:
+        - Arn: !GetAtt LambdaFunction.Arn
+          Id: "TriggerLambdaDaily"
+          Input: "{}"
+
+Outputs:
+  LambdaFunctionArn:
+    Value: !GetAtt LambdaFunction.Arn
+    Description: "ARN of the Lambda Function"
