@@ -37,6 +37,14 @@ Resources:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource: "arn:aws:logs:*:*:*"
+        - PolicyName: "EventBridgeLambdaInvocationPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: "*"
 
   LambdaFunction:
     Type: AWS::Lambda::Function
@@ -140,6 +148,14 @@ Resources:
         Variables:
           SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
       Timeout: 30
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt EventBridgeRule.Arn
 
   EventBridgeRule:
     Type: AWS::Events::Rule
