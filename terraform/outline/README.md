@@ -10,7 +10,7 @@ chmod +x util.sh
 ./util.sh save_private_key
 ssh -i ./outline_key.pem ec2-user@$(terraform output -raw static_ip_address)
 ```
-1. online-serverをインストールする
+3. online-serverをインストールする
 ```
 sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/Jigsaw-Code/outline-server/master/src/server_manager/install_scripts/install_server.sh)"
 ```
