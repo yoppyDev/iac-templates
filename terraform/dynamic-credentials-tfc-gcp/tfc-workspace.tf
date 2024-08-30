@@ -13,6 +13,16 @@ resource "tfe_workspace" "my_workspace" {
   project_id   = data.tfe_project.tfc_project.id
 }
 
+resource "tfe_variable" "gcp_project_id" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "GCP_PROJECT_ID"
+  value    = var.gcp_project_id
+  category = "env"
+
+  description = "Enable the Workload Identity integration for GCP."
+}
+
 resource "tfe_variable" "enable_gcp_provider_auth" {
   workspace_id = tfe_workspace.my_workspace.id
 
@@ -31,4 +41,14 @@ resource "tfe_variable" "tfc_gcp_workload_provider_name" {
   category = "env"
 
   description = "The workload provider name to authenticate against."
+}
+
+resource "tfe_variable" "tfc_gcp_service_account_email" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_RUN_SERVICE_ACCOUNT_EMAIL"
+  value    = google_service_account.tfc_service_account.email
+  category = "env"
+
+  description = "The GCP service account email runs will use to authenticate."
 }
