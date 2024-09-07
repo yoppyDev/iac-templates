@@ -13,16 +13,6 @@ resource "tfe_workspace" "my_workspace" {
   project_id   = data.tfe_project.tfc_project.id
 }
 
-resource "tfe_variable" "gcp_project_id" {
-  workspace_id = tfe_workspace.my_workspace.id
-
-  key      = "GCP_PROJECT_ID"
-  value    = var.gcp_project_id
-  category = "env"
-
-  description = "Enable the Workload Identity integration for GCP."
-}
-
 resource "tfe_variable" "enable_gcp_provider_auth" {
   workspace_id = tfe_workspace.my_workspace.id
 
@@ -43,6 +33,36 @@ resource "tfe_variable" "tfc_gcp_workload_provider_name" {
   description = "The workload provider name to authenticate against."
 }
 
+resource "tfe_variable" "tfc_gcp_project_number" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_PROJECT_NUMBER"
+  value    = data.google_project.project.number
+  category = "env"
+
+  description = "The numeric identifier of the GCP project"
+}
+
+resource "tfe_variable" "tfc_gcp_workload_pool_id" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_WORKLOAD_POOL_ID"
+  value    = google_iam_workload_identity_pool.tfc_pool.workload_identity_pool_id
+  category = "env"
+
+  description = "The ID of the workload identity pool."
+}
+
+resource "tfe_variable" "tfc_gcp_workload_provider_id" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_WORKLOAD_PROVIDER_ID"
+  value    = google_iam_workload_identity_pool_provider.tfc_provider.workload_identity_pool_provider_id
+  category = "env"
+
+  description = "The ID of the workload identity pool provider."
+}
+
 resource "tfe_variable" "tfc_gcp_service_account_email" {
   workspace_id = tfe_workspace.my_workspace.id
 
@@ -51,4 +71,24 @@ resource "tfe_variable" "tfc_gcp_service_account_email" {
   category = "env"
 
   description = "The GCP service account email runs will use to authenticate."
+}
+
+resource "tfe_variable" "tfc_gcp_audience" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_WORKLOAD_IDENTITY_AUDIENCE"
+  value    = var.tfc_gcp_audience
+  category = "env"
+
+  description = "The value to use as the audience claim in run identity tokens"
+}
+
+resource "tfe_variable" "enable_gcp_provider_auth_other_config" {
+  workspace_id = tfe_workspace.my_workspace.id
+
+  key      = "TFC_GCP_PROVIDER_AUTH_other_config"
+  value    = "true"
+  category = "env"
+
+  description = "Enable the Workload Identity integration for GCP for an additional configuration named other_config."
 }
