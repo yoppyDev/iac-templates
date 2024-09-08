@@ -10,7 +10,8 @@ import pytz
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL')
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
+NOTIFICATION_SERVICE = os.environ.get('NOTIFICATION_SERVICE', 'discord')
 TOKYO_TZ = pytz.timezone('Asia/Tokyo')
 
 def get_today_and_end_of_month():
@@ -60,10 +61,25 @@ def get_current_cost(client, start_time, end_time):
         logger.error(f"Failed to get current cost: {str(e)}")
         return 0.0
 
+def send_discord_notification(messages):
+    headers = {'Content-Type': 'application/json'}
+    try:
+        response = requests.post(WEBHOOK_URL, data=json.dumps({'content': "\n".join(messages)}), headers=headers)
+        return {
+            'statusCode': response.status_code,
+            'body': response.text
+        }
+    except requests.RequestException as e:
+        logger.error(f"Failed to send Discord notification: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': f"Failed to send Discord notification: {str(e)}"
+        }
+
 def send_slack_notification(messages):
     headers = {'Content-Type': 'application/json'}
     try:
-        response = requests.post(SLACK_WEBHOOK_URL, data=json.dumps({'text': "\n".join(messages)}), headers=headers)
+        response = requests.post(WEBHOOK_URL, data=json.dumps({'text': "\n".join(messages)}), headers=headers)
         return {
             'statusCode': response.status_code,
             'body': response.text
@@ -74,6 +90,12 @@ def send_slack_notification(messages):
             'statusCode': 500,
             'body': f"Failed to send Slack notification: {str(e)}"
         }
+
+def send_notification(messages):
+    if NOTIFICATION_SERVICE == 'slack':
+        return send_slack_notification(messages)
+    else:
+        return send_discord_notification(messages)
 
 def handler(event, context):
     today, start_of_month, end_of_month = get_today_and_end_of_month()
@@ -86,4 +108,4 @@ def handler(event, context):
         f"当月の予測費用：${forecast_cost:.2f}\n"
     ]
 
-    send_slack_notification(messages)
+    send_notification(messages)

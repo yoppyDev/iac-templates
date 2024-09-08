@@ -66,27 +66,27 @@ data "archive_file" "function_zip" {
 }
 
 # Layer
-resource "aws_lambda_layer_version" "notify_slack_lambda_layer" {
-  layer_name       = "notify_slack_lambda_layer"
+resource "aws_lambda_layer_version" "notify_lambda_layer" {
+  layer_name       = "notify_lambda_layer"
   filename         = data.archive_file.layer_zip.output_path
   source_code_hash = data.archive_file.layer_zip.output_base64sha256
 }
 
 # Function
-resource "aws_lambda_function" "notify_slack" {
-  function_name = "notify_slack"
+resource "aws_lambda_function" "notify" {
+  function_name = "aws-billing-to-notification"
   role          = aws_iam_role.lambda_iam_role.arn
   handler       = "lambda.main.handler"
   runtime       = "python3.9"
 
   source_code_hash = data.archive_file.function_zip.output_base64sha256
-  layers           = [aws_lambda_layer_version.notify_slack_lambda_layer.arn]
+  layers           = [aws_lambda_layer_version.notify_lambda_layer.arn]
 
   filename = data.archive_file.function_zip.output_path
 
   environment {
     variables = {
-      SLACK_WEBHOOK_URL = var.SLACK_WEBHOOK_URL
+      WEBHOOK_URL = var.WEBHOOK_URL
     }
   }
 }
@@ -100,13 +100,13 @@ resource "aws_cloudwatch_event_rule" "billing_rule" {
 resource "aws_cloudwatch_event_target" "lambda_target" {
   rule      = aws_cloudwatch_event_rule.billing_rule.name
   target_id = "billing-lambda"
-  arn       = aws_lambda_function.notify_slack.arn
+  arn       = aws_lambda_function.notify.arn
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch" {
   statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.notify_slack.function_name
+  function_name = aws_lambda_function.notify.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.billing_rule.arn
 }
