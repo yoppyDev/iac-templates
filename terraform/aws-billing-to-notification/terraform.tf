@@ -10,7 +10,7 @@ terraform {
     organization = "YP"
 
     workspaces {
-      name = "aws-billing-to-slack-notification"
+      name = "aws-billing-to-notification"
     }
   }
 }
