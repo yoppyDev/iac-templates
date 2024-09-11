@@ -78,6 +78,7 @@ resource "aws_lambda_function" "notify" {
   role          = aws_iam_role.lambda_iam_role.arn
   handler       = "lambda.main.handler"
   runtime       = "python3.9"
+  timeout       = 20 // タイムアウトで複数回実行されることがあるため
 
   source_code_hash = data.archive_file.function_zip.output_base64sha256
   layers           = [aws_lambda_layer_version.notify_lambda_layer.arn]
